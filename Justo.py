@@ -24,6 +24,7 @@ END =           'END'
 SEMI =          'SEMI'
 DOT =           'DOT'
 PROGRAM =       'PROGRAM'
+PROCEDURE =     'PROCEDURE'
 VAR =           'VAR'
 COLON =         'COLON'
 COMMA =         'COMMA'
@@ -122,6 +123,12 @@ class VarDecl(AST):
     def __init__(self, var_node, type_node):
         self.var_node = var_node
         self.type_node = type_node
+        
+        
+class ProcedureDecl(AST):
+    def __init__(self, proc_name, block_node):
+        self.proc_name = proc_name
+        self.block_node = block_node
         
         
 class Type(AST):
@@ -248,12 +255,17 @@ class SymbolTableBuilder(NodeVisitor):
         
         self.visit(node.right)
         
+        
     def visit_Var(self, node):
         var_name = node.value
         var_symbol = self.symtab.lookup(var_name)
         
         if var_symbol is None: 
             raise NameError(repr(var_name))
+        
+        
+    def visit_ProcedureDecl(self, node):
+        pass     
         
 
 class Token(object):
@@ -292,6 +304,7 @@ RESERVED_KEYWORDS = {
     'REAL': Token('REAL', 'REAL'),
     'BEGIN': Token('BEGIN', 'BEGIN'),
     'END': Token('END', 'END'),
+    'PROCEDURE': Token('PROCEDURE', 'PROCEDURE')
 }
     
     
@@ -636,10 +649,11 @@ class Parser(object):
         node = Block(declaration_nodes, compound_statement_node)
         
         return node
-    
+
     
     def declarations(self):
         """declarations : VAR (variable_declaration SEMI)+
+                        | (PROCEDURE ID SEMI block SEMI)*
                         | empty        
         """
         declarations = []
@@ -651,6 +665,16 @@ class Parser(object):
                 var_decl = self.variable_declaration()
                 declarations.extend(var_decl)
                 self.eat(SEMI)
+                
+        while self.current_token.type == PROCEDURE:
+            self.eat(PROCEDURE)
+            proc_name = self.current_token.value
+            self.eat(ID)
+            self.eat(SEMI)
+            block_node = self.block()
+            proc_decl = ProcedureDecl(proc_name, block_node)
+            declarations.append(proc_decl)
+            self.eat(SEMI)
                 
         return declarations
     
@@ -756,40 +780,39 @@ class Interpreter(NodeVisitor):
         else:
             return val
         
+        
+    def visit_ProcedureDecl(self, node):
+        pass
+        
 
 def main():
-    text = """
-    PROGRAM Part11;
-    VAR
-       number : INTEGER;
-       a, b   : INTEGER;
-       y      : REAL;
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python Justo.py <filename.pas>")
+        return
 
-    BEGIN {Part11}
-       number := 2;
-       a := number ;
-       b := 10 * a + 10 * number DIV 4;
-       y := 20 / 7 + 3.14
-    END.
-    """
+    filename = sys.argv[1]
+    with open(filename, 'r') as f:
+        text = f.read()
 
     lexer = Lexer(text)
     parser = Parser(lexer)
     tree = parser.parse()
     symtab_builder = SymbolTableBuilder()
     symtab_builder.visit(tree)
-
+    
     print('')
     print('Symbol Table contents:')
     print(symtab_builder.symtab)
 
     interpreter = Interpreter(tree)
-    result = interpreter.interpret()
-
+    result = interpreter.interpret()    
+    
     print('')
     print('Run-time GLOBAL_MEMORY contents:')
+    
     for k, v in sorted(interpreter.GLOBAL_MEMORY.items()):
-        print(f'{k} = {v}')
+        print('{} = {}'.format(k, v))
 
 
 if __name__ == '__main__':
